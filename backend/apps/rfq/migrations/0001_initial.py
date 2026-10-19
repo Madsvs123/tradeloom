@@ -1,0 +1,278 @@
+import uuid
+from decimal import Decimal
+
+import django.core.validators
+import django.db.models.deletion
+import django.utils.timezone
+from django.conf import settings
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    initial = True
+
+    dependencies = [
+        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name="RFQ",
+            fields=[
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("reference", models.CharField(editable=False, max_length=32, unique=True)),
+                ("title", models.CharField(max_length=255)),
+                ("description", models.TextField(blank=True)),
+                ("status", models.CharField(choices=[("draft", "Draft"), ("issued", "Issued"), ("quoting", "Quoting"), ("negotiating", "Negotiating"), ("awarded", "Awarded"), ("closed", "Closed"), ("cancelled", "Cancelled")], default="draft", max_length=24)),
+                ("currency", models.CharField(default="USD", max_length=3)),
+                ("response_deadline", models.DateTimeField(blank=True, null=True)),
+                ("delivery_location", models.CharField(blank=True, max_length=255)),
+                ("payment_terms", models.CharField(blank=True, max_length=255)),
+                ("validity_days", models.PositiveIntegerField(default=30)),
+                ("award_reason", models.TextField(blank=True)),
+                ("buyer", models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name="rfqs_created", to=settings.AUTH_USER_MODEL)),
+            ],
+            options={"ordering": ("created_at",)},
+        ),
+        migrations.CreateModel(
+            name="RfqTemplate",
+            fields=[
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("name", models.CharField(max_length=180)),
+                ("description", models.TextField(blank=True)),
+                ("category", models.CharField(blank=True, max_length=120)),
+                ("status", models.CharField(choices=[("draft", "Draft"), ("active", "Active"), ("archived", "Archived")], default="draft", max_length=16)),
+                ("currency", models.CharField(default="USD", max_length=3)),
+                ("payment_terms", models.CharField(blank=True, max_length=255)),
+                ("delivery_location", models.CharField(blank=True, max_length=255)),
+                ("validity_days", models.PositiveIntegerField(default=30)),
+                ("line_items", models.JSONField(blank=True, default=list)),
+                ("owner", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name="rfq_templates", to=settings.AUTH_USER_MODEL)),
+            ],
+            options={"ordering": ("name",)},
+        ),
+        migrations.CreateModel(
+            name="SupplierQuotation",
+            fields=[
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("status", models.CharField(choices=[("draft", "Draft"), ("submitted", "Submitted"), ("accepted", "Accepted"), ("rejected", "Rejected"), ("countered", "Countered"), ("withdrawn", "Withdrawn")], default="draft", max_length=16)),
+                ("currency", models.CharField(default="USD", max_length=3)),
+                ("subtotal", models.DecimalField(decimal_places=2, default=0, max_digits=14)),
+                ("tax_total", models.DecimalField(decimal_places=2, default=0, max_digits=14)),
+                ("total", models.DecimalField(decimal_places=2, default=0, max_digits=14)),
+                ("valid_until", models.DateTimeField(blank=True, null=True)),
+                ("lead_time_days", models.PositiveIntegerField(default=0)),
+                ("notes", models.TextField(blank=True)),
+                ("submitted_at", models.DateTimeField(blank=True, null=True)),
+                ("rfq", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="quotations", to="rfq.rfq")),
+                ("supplier", models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name="rfq_quotations", to=settings.AUTH_USER_MODEL)),
+            ],
+            options={"ordering": ("-created_at",)},
+        ),
+        migrations.CreateModel(
+            name="RFQLineItem",
+            fields=[
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("line_number", models.PositiveIntegerField()),
+                ("sku", models.CharField(blank=True, max_length=100)),
+                ("description", models.TextField()),
+                ("quantity", models.DecimalField(decimal_places=3, max_digits=12, validators=[django.core.validators.MinValueValidator(0.001)])),
+                ("unit", models.CharField(default="each", max_length=32)),
+                ("target_unit_price", models.DecimalField(blank=True, decimal_places=2, max_digits=12, null=True, validators=[django.core.validators.MinValueValidator(0)])),
+                ("required_delivery_date", models.DateField(blank=True, null=True)),
+                ("notes", models.TextField(blank=True)),
+                ("rfq", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="line_items", to="rfq.rfq")),
+            ],
+            options={"ordering": ("line_number", "id")},
+        ),
+        migrations.CreateModel(
+            name="SupplierCounterOffer",
+            fields=[
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("status", models.CharField(choices=[("open", "Open"), ("accepted", "Accepted"), ("rejected", "Rejected"), ("superseded", "Superseded")], default="open", max_length=16)),
+                ("proposed_total", models.DecimalField(decimal_places=2, max_digits=14)),
+                ("currency", models.CharField(default="USD", max_length=3)),
+                ("terms", models.TextField(blank=True)),
+                ("valid_until", models.DateTimeField(blank=True, null=True)),
+                ("created_by", models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name="rfq_counteroffers", to=settings.AUTH_USER_MODEL)),
+                ("quotation", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="counteroffers", to="rfq.supplierquotation")),
+            ],
+            options={"ordering": ("-created_at",)},
+        ),
+        migrations.CreateModel(
+            name="RFQStatusHistory",
+            fields=[
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("from_status", models.CharField(blank=True, max_length=24)),
+                ("to_status", models.CharField(max_length=24)),
+                ("note", models.TextField(blank=True)),
+                ("actor", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to=settings.AUTH_USER_MODEL)),
+                ("rfq", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="status_history", to="rfq.rfq")),
+            ],
+        ),
+        migrations.CreateModel(
+            name="RFQSupplier",
+            fields=[
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("status", models.CharField(choices=[("invited", "Invited"), ("declined", "Declined"), ("quoted", "Quoted"), ("awarded", "Awarded"), ("lost", "Lost")], default="invited", max_length=16)),
+                ("invited_at", models.DateTimeField(default=django.utils.timezone.now)),
+                ("responded_at", models.DateTimeField(blank=True, null=True)),
+                ("decline_reason", models.TextField(blank=True)),
+                ("rfq", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="invited_suppliers", to="rfq.rfq")),
+                ("supplier", models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name="rfq_invites", to=settings.AUTH_USER_MODEL)),
+            ],
+            options={"ordering": ("rfq", "id")},
+        ),
+        migrations.CreateModel(
+            name="RFQDocument",
+            fields=[
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("title", models.CharField(max_length=180)),
+                ("document_type", models.CharField(choices=[("specification", "Specification"), ("drawing", "Drawing"), ("terms", "Terms and conditions"), ("appendix", "Appendix"), ("other", "Other")], default="other", max_length=32)),
+                ("file_name", models.CharField(max_length=255)),
+                ("file_url", models.URLField()),
+                ("rfq", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="documents", to="rfq.rfq")),
+                ("uploaded_by", models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name="rfq_documents", to=settings.AUTH_USER_MODEL)),
+            ],
+            options={"ordering": ("rfq", "title")},
+        ),
+        migrations.CreateModel(
+            name="RFQAttachment",
+            fields=[
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("file_name", models.CharField(max_length=255)),
+                ("file_url", models.URLField()),
+                ("content_type", models.CharField(blank=True, max_length=120)),
+                ("counteroffer", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name="attachments", to="rfq.suppliercounteroffer")),
+                ("quotation", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name="attachments", to="rfq.supplierquotation")),
+                ("rfq", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name="attachments", to="rfq.rfq")),
+                ("uploaded_by", models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name="rfq_attachments", to=settings.AUTH_USER_MODEL)),
+            ],
+        ),
+        migrations.CreateModel(
+            name="QuotationComparisonSnapshot",
+            fields=[
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("snapshot", models.JSONField(blank=True, default=dict)),
+                ("summary", models.TextField(blank=True)),
+                ("created_by", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name="rfq_comparison_snapshots", to=settings.AUTH_USER_MODEL)),
+                ("rfq", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="comparison_snapshots", to="rfq.rfq")),
+            ],
+            options={"ordering": ("-created_at",)},
+        ),
+        migrations.CreateModel(
+            name="QuotationLineItem",
+            fields=[
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("quantity", models.DecimalField(decimal_places=3, max_digits=12, validators=[django.core.validators.MinValueValidator(0.001)])),
+                ("unit_price", models.DecimalField(decimal_places=2, max_digits=12, validators=[django.core.validators.MinValueValidator(0)])),
+                ("currency", models.CharField(default="USD", max_length=3)),
+                ("exchange_rate", models.DecimalField(decimal_places=6, default=Decimal("1.000000"), max_digits=12)),
+                ("lead_time_days", models.PositiveIntegerField(default=0)),
+                ("notes", models.TextField(blank=True)),
+                ("quotation", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="lines", to="rfq.supplierquotation")),
+                ("rfq_line", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="quoted_lines", to="rfq.rqflineitem")),
+            ],
+        ),
+        migrations.CreateModel(
+            name="NegotiationRoom",
+            fields=[
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("status", models.CharField(choices=[("open", "Open"), ("closed", "Closed")], default="open", max_length=16)),
+                ("participants", models.JSONField(blank=True, default=list)),
+                ("opened_at", models.DateTimeField(default=django.utils.timezone.now)),
+                ("closed_at", models.DateTimeField(blank=True, null=True)),
+                ("opened_by", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name="opened_negotiation_rooms", to=settings.AUTH_USER_MODEL)),
+                ("rfq", models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name="negotiation_room", to="rfq.rfq")),
+            ],
+        ),
+        migrations.CreateModel(
+            name="NegotiationMessage",
+            fields=[
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("body", models.TextField()),
+                ("is_internal", models.BooleanField(default=False)),
+                ("author", models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name="rfq_messages", to=settings.AUTH_USER_MODEL)),
+                ("quotation", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name="messages", to="rfq.supplierquotation")),
+                ("rfq", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="messages", to="rfq.rfq")),
+            ],
+        ),
+        migrations.CreateModel(
+            name="EvaluationScore",
+            fields=[
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("score", models.DecimalField(decimal_places=2, max_digits=6)),
+                ("passed", models.BooleanField(default=True)),
+                ("notes", models.TextField(blank=True)),
+                ("criterion", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="scores", to="rfq.evaluationcriterion")),
+                ("quotation", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="evaluation_scores", to="rfq.supplierquotation")),
+                ("scored_by", models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name="rfq_evaluation_scores", to=settings.AUTH_USER_MODEL)),
+            ],
+            options={"ordering": ("criterion", "id")},
+        ),
+        migrations.CreateModel(
+            name="EvaluationCriterion",
+            fields=[
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("name", models.CharField(max_length=160)),
+                ("description", models.TextField(blank=True)),
+                ("weight", models.DecimalField(decimal_places=2, default=Decimal("1.00"), max_digits=5, validators=[django.core.validators.MinValueValidator(0)])),
+                ("scale", models.CharField(choices=[("points_10", "0-10 points"), ("points_100", "0-100 points"), ("pass_fail", "Pass / Fail")], default="points_10", max_length=16)),
+                ("is_active", models.BooleanField(default=True)),
+                ("rfq", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="evaluation_criteria", to="rfq.rfq")),
+            ],
+            options={"ordering": ("rfq", "id")},
+        ),
+        migrations.AddField(
+            model_name="rfq",
+            name="awarded_quotation",
+            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name="awarded_rfqs", to="rfq.supplierquotation"),
+        ),
+        migrations.AlterUniqueTogether(
+            name="rqflineitem",
+            unique_together={("rfq", "line_number")},
+        ),
+        migrations.AlterUniqueTogether(
+            name="rfqsupplier",
+            unique_together={("rfq", "supplier")},
+        ),
+        migrations.AlterUniqueTogether(
+            name="quotationlineitem",
+            unique_together={("quotation", "rfq_line")},
+        ),
+        migrations.AlterUniqueTogether(
+            name="evaluationscore",
+            unique_together={("criterion", "quotation")},
+        ),
+    ]

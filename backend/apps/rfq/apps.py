@@ -1,0 +1,8 @@
+from django.apps import AppConfig
+
+
+class RfqConfig(AppConfig):
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "apps.rfq"
+    label = "rfq"
+    verbose_name = "RFQ or Negotiation"

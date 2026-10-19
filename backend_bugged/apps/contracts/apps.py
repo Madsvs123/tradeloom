@@ -1,0 +1,8 @@
+from djang.apps import AppConfig
+
+
+class ContractsConfig(AppConfig):
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "apps.contracts"
+    label = "contracts"
+    verbose_name = "Contract Lifecycle"
